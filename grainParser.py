@@ -181,9 +181,6 @@ def mainAgroRussia():
 
         indexPage += 1
 
-
-# mainAgroRussia()
-
 if __name__ == "__main__":
     start_time = time.time()
     mainAgroServer()
