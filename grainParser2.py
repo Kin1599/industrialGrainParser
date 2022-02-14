@@ -178,6 +178,7 @@ def mainAgroRussia():
         pages = []
 
     while indexPage <= len(pages) + 1:
+        time.sleep(1)
         currentLink = linkAgroRussiaSearchSaflor + str(indexPage)
 
         soupAgroRussiaPage = getSoup(currentLink)
@@ -223,7 +224,7 @@ def mainAgroRussia():
                 print(f'{itemName.text} за {itemPrice} -> {itemLink}')
                 additionArr(itemName.text, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
-        time.sleep(2)
+
         print(f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
         indexPage += 1
 
