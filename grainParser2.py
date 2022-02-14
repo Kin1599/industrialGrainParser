@@ -223,10 +223,10 @@ def mainAgroRussia():
                 print(f'{itemName.text} за {itemPrice} -> {itemLink}')
                 additionArr(itemName.text, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
-        time.sleep(1)
+        time.sleep(2)
         print(f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
-
         indexPage += 1
+
 
 def main():
     start_time = time.time()
