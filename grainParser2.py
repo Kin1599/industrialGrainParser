@@ -40,9 +40,14 @@ for key, value in productID.items():
     print("ID Товара {0}: {1}".format(key, value))
 
 id_product = input("Введите id товара для парсинга сайта agro-russia.com ")
-linkAgroRussiaSearchSaflor = f'https://agro-russia.com/ru/trade/?adv_search=1&r_id={id_product}&types_id=2&page='
+linkAgroRussiaSearch = f'https://agro-russia.com/ru/trade/?adv_search=1&r_id={id_product}&types_id=2&page='
 
 linkAgroRussia = 'https://agro-russia.com/'
+
+name_product = input("Введите название товара на русском языке для парсинга сайта grainboard.ru ")
+
+linkGrainBoard = 'https://grainboard.ru/'
+linkGrainBoardSearch = f'https://grainboard.ru/trade/search?deal=sale&search={name_product}&p='
 
 arrName = []
 arrLink = []
@@ -86,7 +91,7 @@ def excelEntry(name, city, price, date, org, link):
         dictResult['Ссылка'] = link
 
         dataFrame = pd.DataFrame(dictResult)
-        dataFrame.to_excel("./Dad.xlsx", index=False) 
+        dataFrame.to_excel("E:\Python\Dad\Dad.xlsx", index=False) 
 
         print('Успешно перезаписан excel-файл')
 
@@ -169,7 +174,7 @@ def mainAgroRussia():
 
     indexPage = 1
 
-    soupAgroRussia = getSoup(linkAgroRussiaSearchSaflor + str(indexPage))
+    soupAgroRussia = getSoup(linkAgroRussiaSearch + str(indexPage))
 
     #Получение кол-ва страниц
     try:
@@ -178,8 +183,7 @@ def mainAgroRussia():
         pages = []
 
     while indexPage <= len(pages) + 1:
-        time.sleep(1)
-        currentLink = linkAgroRussiaSearchSaflor + str(indexPage)
+        currentLink = linkAgroRussiaSearch + str(indexPage)
 
         soupAgroRussiaPage = getSoup(currentLink)
 
@@ -187,7 +191,6 @@ def mainAgroRussia():
         itemsAgroRussia = soupAgroRussiaPage.find_all('div', class_ = 'i_l_i_c_mode3')
 
         for i in range(0, len(itemsAgroRussia)):
-            
             #Берём имя товара
             itemName = itemsAgroRussia[i].find('a', class_ = 'i_title')
             
@@ -224,8 +227,79 @@ def mainAgroRussia():
                 print(f'{itemName.text} за {itemPrice} -> {itemLink}')
                 additionArr(itemName.text, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
-
+        time.sleep(1)
         print(f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
+
+        indexPage += 1
+
+def mainGrainBoard(link):
+    print(f'[INFO]: Началась обработка с сайта {linkGrainBoard}')
+
+    indexPage = 1
+
+    soupGrainBoard = getSoup(link + str(indexPage))
+
+    #Получение кол-ва страниц
+    try:
+        if soupGrainBoard.find('a', attrs={'title': 'Последняя страница'}):
+            pages = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).text
+            link = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).get('href')[:-2]
+        else:
+            pages = len(soupGrainBoard.find('p', class_='pages').find_all('a'))
+    except:
+        pages = 1
+
+    while indexPage <= int(pages):
+        currentLink = link + str(indexPage)
+
+        soupGrainBoardPage = getSoup(currentLink)
+
+        #Получение всех товаров на странице
+        itemsGrainBoard = soupGrainBoardPage.find_all('tr', class_='offer-row')
+
+        for i in range(0, len(itemsGrainBoard)):
+            #Берём имя товара
+            try:
+                itemName = itemsGrainBoard[i].find('div', class_='row').text.strip()
+            except:
+                itemName = 'без названия'
+            
+            #Ссылка товара
+            try:
+                itemLink = 'https:' + itemsGrainBoard[i].find('div', class_='row').find('a').get('href')
+            except:
+                itemLink = 'ссылка не найдена'
+
+            #Берём цену на товар
+            try:
+                itemPrice = itemsGrainBoard[i].find('td', class_='td-name').find('span', class_='price').text.strip()
+            except:
+                itemPrice = 'цена не указана'
+
+            #Когда опубликовали товар
+            try:
+                itemDate = itemsGrainBoard[i].find('td', class_='td-date').find('span').get('title').strip()
+            except:
+                itemDate = 'не указано, когда опубликовано'
+
+            #Город товара
+            try:
+                itemCity = itemsGrainBoard[i].find('div', class_='p-city').text.strip()
+            except:
+                itemCity = 'город не указан'
+
+            #Организация, продающая товар
+            try:
+                itemOrg = itemsGrainBoard[i].find('div', class_='media-body').find('a').text.strip()
+            except:
+                itemOrg = 'компания не указана'
+            
+            print(f'{itemName} за {itemPrice} -> {itemLink}')
+            additionArr(itemName, itemCity, itemPrice, itemDate, itemOrg, itemLink)
+
+        time.sleep(1.5)
+        print(f'[INFO]: Обработал {indexPage}/{pages}')
+
         indexPage += 1
 
 
@@ -234,6 +308,8 @@ def main():
     mainAgroServer()
     time.sleep(1.5)
     mainAgroRussia()
+    time.sleep(1.5)
+    mainGrainBoard(linkGrainBoardSearch)
     time.sleep(1.5)
     excelEntry(arrName, arrCity, arrPrice, arrDate, arrOrg, arrLink)
     print(time.time() - start_time)
