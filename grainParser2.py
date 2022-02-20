@@ -2,10 +2,11 @@ import requests
 import fake_useragent
 import time
 import pandas as pd
-import threading
+import datetime
 from bs4 import BeautifulSoup
 from geopy.geocoders import Nominatim
 from geopy.distance import distance
+from deep_translator import GoogleTranslator
 from colorama import Fore, Back, init
 
 
@@ -16,17 +17,28 @@ user = fake_useragent.UserAgent().random
 nom = Nominatim(user_agent = user)
 
 header = {
-    'user-agent': user
+    "user-agent": user
     }
 
 #Спрашиваем пользователя откуда он и дальность закупки
-fromCity = input('Откуда вы? (пример: Москва, Саратов) ')
+fromCity = input("Откуда вы? (пример: Москва, Саратов) ")
+
+city1 = nom.geocode(fromCity)
+
+my_coordinates = (city1.latitude, city1.longitude)
+
+#Спрашиваем пользователя за какой период брать объявления
+try:
+    period = int(input("За какой период брать объявления (в днях: например: 14) "))
+    dateMax = datetime.datetime.today() - datetime.timedelta(days = period)
+except ValueError:
+    print(Back.RED + "[INFO]: Некорректно написаны дни, попробуйте ещё раз... ")
 
 try:
-    purchaseRange = float(input('Дальность закупки (максимальное расстояние от вашего города в км) '))
+    purchaseRange = float(input("Дальность закупки (максимальное расстояние от вашего города в км) "))
 except ValueError:
     print(Back.RED + "[INFO]: Некорректно написана дальность, попробуйте ещё раз... ")
-    input('Для закрытия нажмите любую кнопку... ')
+    input("Для закрытия нажмите любую кнопку... ")
 
 #Cсылка на агро сервер поиск
 productName = {
@@ -44,9 +56,9 @@ for key, value in productName.items():
 
 inputProductName = input("Введите товар на английском для парсинга сайта agroserver.ru ")
 
-linkAgroServerSearch = f'https://agroserver.ru/{inputProductName}/'
+linkAgroServerSearch = f"https://agroserver.ru/{inputProductName}/"
 #Cсылка на агро сервер
-linkAgroServer = 'https://agroserver.ru'
+linkAgroServer = "https://agroserver.ru"
 
 
 #Ссылка на agro russia
@@ -66,11 +78,11 @@ for key, value in productID.items():
 id_product = input("Введите id товара для парсинга сайта agro-russia.com ")
 linkAgroRussiaSearch = f'https://agro-russia.com/ru/trade/?adv_search=1&r_id={id_product}&types_id=2&page='
 
-linkAgroRussia = 'https://agro-russia.com/'
+linkAgroRussia = "https://agro-russia.com/"
 
 name_product = input("Введите название товара на русском языке для парсинга сайта grainboard.ru ")
 
-linkGrainBoard = 'https://grainboard.ru/'
+linkGrainBoard = "https://grainboard.ru/"
 linkGrainBoardSearch = f'https://grainboard.ru/trade/search?deal=sale&search={name_product}&p='
 
 arrName = []
@@ -81,12 +93,12 @@ arrDate = []
 arrOrg = []
 
 dictResult = {
-    'Название': '',
-    'Цена': '',
-    'Город': '', 
-    'Опубликовано': '',
-    'Организация': '',
-    'Ссылка': ''
+    "Название": "",
+    "Цена": "",
+    "Город": "", 
+    "Опубликовано": "",
+    "Организация": "",
+    "Ссылка": ""
 }
 
 #Функция получения кода страницы
@@ -117,7 +129,7 @@ def excelEntry(name, city, price, date, org, link):
         dataFrame = pd.DataFrame(dictResult)
         dataFrame.to_excel("./Dad.xlsx", index=False) 
 
-        print('Успешно перезаписан excel-файл')
+        print("Успешно перезаписан excel-файл")
 
 #Функция подсчёта расстояния между городами
 def distancebetweencities(myCity, alienCity):
@@ -142,7 +154,7 @@ def mainAgroServer():
     try:
         pages = soupAgroServer.find('ul', class_ = 'pg').find_all('li')
     except:
-        pages = ['1']
+        pages = ["1"]
     
     while indexPage <= len(pages):
         currentLink = f'{linkAgroServerSearch}Y2l0eT18cmVnaW9uPXxjb3VudHJ5PXxtZXRrYT18c29ydD0x/{indexPage}/'
@@ -153,7 +165,19 @@ def mainAgroServer():
         #Получение всех товаров на странице
         itemsAgroServer = soupAgroServerPage.find_all('div', class_ = 'line')
         
-        for i in range(0, len(itemsAgroServer)):  
+        for i in range(0, len(itemsAgroServer)):
+            #Когда опубликовали товар
+            try:
+                itemDate = itemsAgroServer[i].find('div', class_ = 'date').text.strip()
+                if itemDate.find("сегодня") == -1 or itemDate.find("вчера") == -1:
+                    date = GoogleTranslator(source= "auto", target= "en").translate(text = itemDate)
+                    date = datetime.datetime.strptime(date, '%d %B %Y')
+                    if dateMax > date:
+                        print("Устаревшее объявление")
+                        continue
+            except:
+                itemDate = "не указано, когда опубликовано"
+
             #Город товара
             try:
                 itemGeo = itemsAgroServer[i].find('div', class_ = 'geo').text.strip()
@@ -164,15 +188,15 @@ def mainAgroServer():
                     beetween = float(distancebetweencities(fromCity, itemGeo))
                     #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
                     if beetween > purchaseRange:
-                        print('Город не подходит')
+                        print("Город не подходит")
                         continue
                 #Если город начинается с доставка
-                elif itemGeo.find('доставка') == 0:
+                elif itemGeo.find("доставка") == 0:
                     itemGeo = itemGeo.strip()
                 else:
                     itemGeo = itemGeo.strip()
             except:
-                itemGeo = 'город не указан'
+                itemGeo = "город не указан"
 
             #Берём имя товара и ссылку на товар
             try:
@@ -186,22 +210,16 @@ def mainAgroServer():
             try:
                 itemPrice = itemsAgroServer[i].find('div', class_ = 'price').text
             except:
-                itemPrice = 'цена не указана'
-            
-            #Когда опубликовали товар
-            try:
-                itemData = itemsAgroServer[i].find('div', class_ = 'date').text.strip()
-            except:
-                itemData = 'не указано, когда опубликовано'
+                itemPrice = "цена не указана"
 
             #Организация, продающая товар
             try:
                 itemOrg = itemsAgroServer[i].find('a', class_ = 'personal_org_menu').text.strip()
             except:
-                itemOrg = 'компания не указана'
+                itemOrg = "компания не указана"
             
-            print(f"{itemName} за {itemPrice} опубликован {itemData} у {itemOrg}-> {itemLink}")
-            additionArr(itemName, itemGeo, itemPrice, itemData, itemOrg, itemLink)
+            print(f'{itemName} за {itemPrice} опубликован {itemDate} у {itemOrg}-> {itemLink}')
+            additionArr(itemName, itemGeo, itemPrice, itemDate, itemOrg, itemLink)
 
         time.sleep(1)
         print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{len(pages)}')
@@ -241,9 +259,20 @@ def mainAgroRussia():
                 try:
                     itemPrice = itemsAgroRussia[i].find('span', class_ = 'i_price').text
                 except:
-                    itemPrice = 'цена не указана'
+                    itemPrice = "цена не указана"
 
                 soupAgroRussiaItem = getSoup(itemLink)
+
+                #Когда опубликовали товар
+                try:
+                    itemDate = soupAgroRussiaItem.find('time').text[:10]
+                    if itemDate.find("Сегодня") == -1 or itemDate.find("Вчера") == -1:
+                        date = datetime.datetime.strptime(itemDate, '%d-%m-%Y')
+                        if dateMax > date:
+                            print("Устаревшее объявление")
+                            continue
+                except:
+                    itemDate = "не указано, когда опубликовано"
 
                 #Город товара
                 try: 
@@ -252,22 +281,16 @@ def mainAgroRussia():
                     beetween = float(distancebetweencities(fromCity, itemCity))
                     #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
                     if beetween > purchaseRange:
-                        print('Город не подходит')
+                        print("Город не подходит")
                         continue
                 except:
-                    itemCity = 'город не указан'
-                
-                #Когда опубликовали товар
-                try:
-                    itemDate = soupAgroRussiaItem.find('time').text[:10]
-                except:
-                    itemDate = 'не указано, когда опубликовано'
+                    itemCity = "город не указан"
                 
                 #Организация, продающая товар
                 try:
                     itemOrg = soupAgroRussiaItem.find('div', class_ = 'ct_user_box_7_1').text[:itemOrg.find('/')]                 
                 except:
-                    itemOrg = 'компания не указана'
+                    itemOrg = "компания не указана"
 
                 print(f'{itemName.text} за {itemPrice} -> {itemLink}')
                 additionArr(itemName.text, itemCity, itemPrice, itemDate, itemOrg, itemLink)
@@ -288,7 +311,10 @@ def mainGrainBoard(link):
     try:
         if soupGrainBoard.find('a', attrs={'title': 'Последняя страница'}):
             pages = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).text
-            link = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).get('href')[:-2]
+            if int(pages) > 9:
+                link = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).get('href')[:-2]
+            else:
+                link = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).get('href')[:-1]
         else:
             pages = len(soupGrainBoard.find('p', class_='pages').find_all('a'))
     except:
@@ -297,52 +323,59 @@ def mainGrainBoard(link):
     while indexPage <= int(pages):
         currentLink = link + str(indexPage)
 
+        print(currentLink)
         soupGrainBoardPage = getSoup(currentLink)
 
         #Получение всех товаров на странице
         itemsGrainBoard = soupGrainBoardPage.find_all('tr', class_='offer-row')
 
         for i in range(0, len(itemsGrainBoard)):
+            #Когда опубликовали товар
+            try:
+                itemDate = itemsGrainBoard[i].find('td', class_='td-date').find('span').get('title').strip()
+                date_new = itemDate[:itemDate.find('г')]
+                date = GoogleTranslator(source= "auto", target= "en").translate(text = date_new)
+                date = datetime.datetime.strptime(date, '%B %d, %Y')
+                if dateMax > date:
+                    print("Устаревшее объявление")
+                    continue
+            except:
+                itemDate = "не указано, когда опубликовано"
+
             #Город товара
             try:
                 itemCity = itemsGrainBoard[i].find('div', class_='p-city').text.strip()
                 beetween = float(distancebetweencities(fromCity, itemCity))
                 #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
                 if beetween > purchaseRange:
-                    print('Город не подходит')
+                    print("Город не подходит")
                     continue
             except:
-                itemCity = 'город не указан'
+                itemCity = "город не указан"
 
             #Берём имя товара
             try:
                 itemName = itemsGrainBoard[i].find('div', class_='row').text.strip()
             except:
-                itemName = 'без названия'
+                itemName = "без названия"
             
             #Ссылка товара
             try:
-                itemLink = 'https:' + itemsGrainBoard[i].find('div', class_='row').find('a').get('href')
+                itemLink = "https:" + itemsGrainBoard[i].find('div', class_='row').find('a').get('href')
             except:
-                itemLink = 'ссылка не найдена'
+                itemLink = "ссылка не найдена"
 
             #Берём цену на товар
             try:
                 itemPrice = itemsGrainBoard[i].find('td', class_='td-name').find('span', class_='price').text.strip()
             except:
-                itemPrice = 'цена не указана'
-
-            #Когда опубликовали товар
-            try:
-                itemDate = itemsGrainBoard[i].find('td', class_='td-date').find('span').get('title').strip()
-            except:
-                itemDate = 'не указано, когда опубликовано'
+                itemPrice = "цена не указана"
 
             #Организация, продающая товар
             try:
                 itemOrg = itemsGrainBoard[i].find('div', class_='media-body').find('a').text.strip()
             except:
-                itemOrg = 'компания не указана'
+                itemOrg = "компания не указана"
             
             print(f'{itemName} за {itemPrice} -> {itemLink}')
             additionArr(itemName, itemCity, itemPrice, itemDate, itemOrg, itemLink)
@@ -355,10 +388,10 @@ def mainGrainBoard(link):
 
 def main():
     start_time = time.time()
-    mainAgroServer()
-    time.sleep(1.5)
-    mainAgroRussia()
-    time.sleep(1.5)
+    # mainAgroServer()
+    # time.sleep(1.5)
+    # mainAgroRussia()
+    # time.sleep(1.5)
     mainGrainBoard(linkGrainBoardSearch)
     time.sleep(1.5)
     excelEntry(arrName, arrCity, arrPrice, arrDate, arrOrg, arrLink)
