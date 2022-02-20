@@ -2,20 +2,41 @@ import requests
 import fake_useragent
 import time
 import pandas as pd
+import threading
 from bs4 import BeautifulSoup
+from geopy.geocoders import Nominatim
+from geopy.distance import distance
+from colorama import Fore, Back, init
+
+
+init(autoreset = True)
 
 user = fake_useragent.UserAgent().random
+
+nom = Nominatim(user_agent = user)
 
 header = {
     'user-agent': user
     }
+
+#Спрашиваем пользователя откуда он и дальность закупки
+fromCity = input('Откуда вы? (пример: Москва, Саратов) ')
+
+try:
+    purchaseRange = float(input('Дальность закупки (максимальное расстояние от вашего города в км) '))
+except ValueError:
+    print(Back.RED + "[INFO]: Некорректно написана дальность, попробуйте ещё раз... ")
+    input('Для закрытия нажмите любую кнопку... ')
 
 #Cсылка на агро сервер поиск
 productName = {
     "Сафлор": "saflor",
     "Подсолнечник": "podsolnechnik",
     "Лён": "len",
-    "Горчица": "gorchitsa"
+    "Горчица": "gorchitsa",
+    "Кукуруза": "kukuruza",
+    "Чечевица": "chechevitsa",
+    "Гречка": "grechka"
 } 
 
 for key, value in productName.items():
@@ -23,7 +44,7 @@ for key, value in productName.items():
 
 inputProductName = input("Введите товар на английском для парсинга сайта agroserver.ru ")
 
-linkAgroServerSearchSaflor = f'https://agroserver.ru/{inputProductName}/'
+linkAgroServerSearch = f'https://agroserver.ru/{inputProductName}/'
 #Cсылка на агро сервер
 linkAgroServer = 'https://agroserver.ru'
 
@@ -33,7 +54,10 @@ productID = {
     "Сафлор": "790",
     "Подсолнечник": "49",
     "Лён": "53",
-    "Горчица": "54"
+    "Горчица": "54",
+    "Кукуруза": "43",
+    "Чечевица": "40",
+    "Гречка": "36"
 }
 
 for key, value in productID.items():
@@ -91,17 +115,28 @@ def excelEntry(name, city, price, date, org, link):
         dictResult['Ссылка'] = link
 
         dataFrame = pd.DataFrame(dictResult)
-        dataFrame.to_excel("E:\Python\Dad\Dad.xlsx", index=False) 
+        dataFrame.to_excel("./Dad.xlsx", index=False) 
 
         print('Успешно перезаписан excel-файл')
 
+#Функция подсчёта расстояния между городами
+def distancebetweencities(myCity, alienCity):
+    city1 = nom.geocode(myCity)
+    city2 = nom.geocode(alienCity)
+
+    my_coordinates = (city1.latitude, city1.longitude)
+    alien_coordinates = (city2.latitude, city2.longitude)
+
+    distanceCities = round(distance(my_coordinates, alien_coordinates).km, 2)
+    return distanceCities
+
 #Информация с Агро Сервера
 def mainAgroServer():
-    print(f'[INFO]: Началась обработка с сайта {linkAgroServer}')
+    print(Back.GREEN + Fore.WHITE + f'[INFO]: Началась обработка с сайта {linkAgroServer}')
 
     indexPage = 1
     
-    soupAgroServer = getSoup(linkAgroServerSearchSaflor)
+    soupAgroServer = getSoup(linkAgroServerSearch)
 
     #Получение кол-ва страниц
     try:
@@ -110,16 +145,35 @@ def mainAgroServer():
         pages = ['1']
     
     while indexPage <= len(pages):
-        # currentLink = 'https://agroserver.ru/len/Y2l0eT18cmVnaW9uPXxjb3VudHJ5PXxtZXRrYT18c29ydD0x/' + str(indexPage) + "/"
-        currentLink = linkAgroServerSearchSaflor
+        currentLink = f'{linkAgroServerSearch}Y2l0eT18cmVnaW9uPXxjb3VudHJ5PXxtZXRrYT18c29ydD0x/{indexPage}/'
+        # currentLink = linkAgroServerSearch
 
         soupAgroServerPage = getSoup(currentLink)
 
         #Получение всех товаров на странице
         itemsAgroServer = soupAgroServerPage.find_all('div', class_ = 'line')
         
-        for i in range(0, len(itemsAgroServer)):
-            
+        for i in range(0, len(itemsAgroServer)):  
+            #Город товара
+            try:
+                itemGeo = itemsAgroServer[i].find('div', class_ = 'geo').text.strip()
+                #Если город начинается с г.
+                if itemGeo.find('г.') == 0:
+                    #Записываем без г.
+                    itemGeo = itemGeo[3:].strip()
+                    beetween = float(distancebetweencities(fromCity, itemGeo))
+                    #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
+                    if beetween > purchaseRange:
+                        print('Город не подходит')
+                        continue
+                #Если город начинается с доставка
+                elif itemGeo.find('доставка') == 0:
+                    itemGeo = itemGeo.strip()
+                else:
+                    itemGeo = itemGeo.strip()
+            except:
+                itemGeo = 'город не указан'
+
             #Берём имя товара и ссылку на товар
             try:
                 itemName = itemsAgroServer[i].find('div', class_ = 'th')
@@ -145,32 +199,17 @@ def mainAgroServer():
                 itemOrg = itemsAgroServer[i].find('a', class_ = 'personal_org_menu').text.strip()
             except:
                 itemOrg = 'компания не указана'
-
-            #Город товара
-            try:
-                itemGeo = itemsAgroServer[i].find('div', class_ = 'geo').text.strip()
-                #Если город начинается с г.
-                if itemGeo.find('г.') == 0:
-                    #Записываем без г.
-                    itemGeo = itemGeo[3:].strip()
-                #Если город начинается с доставка
-                elif itemGeo.find('доставка') == 0:
-                    itemGeo = itemGeo.strip()
-                else:
-                    itemGeo = itemGeo.strip()
-            except:
-                itemGeo = 'город не указан'
             
             print(f"{itemName} за {itemPrice} опубликован {itemData} у {itemOrg}-> {itemLink}")
             additionArr(itemName, itemGeo, itemPrice, itemData, itemOrg, itemLink)
 
         time.sleep(1)
-        print(f'[INFO]: Обработал {indexPage}/{len(pages)}')
+        print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{len(pages)}')
 
         indexPage += 1
 
 def mainAgroRussia():
-    print(f'[INFO]: Началась обработка с сайта {linkAgroRussia}')
+    print(Back.GREEN + Fore.WHITE + f'[INFO]: Началась обработка с сайта {linkAgroRussia}')
 
     indexPage = 1
 
@@ -205,18 +244,24 @@ def mainAgroRussia():
                     itemPrice = 'цена не указана'
 
                 soupAgroRussiaItem = getSoup(itemLink)
+
+                #Город товара
+                try: 
+                    itemCity = soupAgroRussiaItem.find('span', itemprop = 'addressLocality').text
+
+                    beetween = float(distancebetweencities(fromCity, itemCity))
+                    #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
+                    if beetween > purchaseRange:
+                        print('Город не подходит')
+                        continue
+                except:
+                    itemCity = 'город не указан'
                 
                 #Когда опубликовали товар
                 try:
                     itemDate = soupAgroRussiaItem.find('time').text[:10]
                 except:
                     itemDate = 'не указано, когда опубликовано'
-
-                #Город товара
-                try: 
-                    itemCity = soupAgroRussiaItem.find('span', itemprop = 'addressLocality').text
-                except:
-                    itemCity = 'город не указан'
                 
                 #Организация, продающая товар
                 try:
@@ -228,12 +273,12 @@ def mainAgroRussia():
                 additionArr(itemName.text, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
         time.sleep(1)
-        print(f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
+        print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
 
         indexPage += 1
 
 def mainGrainBoard(link):
-    print(f'[INFO]: Началась обработка с сайта {linkGrainBoard}')
+    print(Back.GREEN + Fore.WHITE + f'[INFO]: Началась обработка с сайта {linkGrainBoard}')
 
     indexPage = 1
 
@@ -258,6 +303,17 @@ def mainGrainBoard(link):
         itemsGrainBoard = soupGrainBoardPage.find_all('tr', class_='offer-row')
 
         for i in range(0, len(itemsGrainBoard)):
+            #Город товара
+            try:
+                itemCity = itemsGrainBoard[i].find('div', class_='p-city').text.strip()
+                beetween = float(distancebetweencities(fromCity, itemCity))
+                #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
+                if beetween > purchaseRange:
+                    print('Город не подходит')
+                    continue
+            except:
+                itemCity = 'город не указан'
+
             #Берём имя товара
             try:
                 itemName = itemsGrainBoard[i].find('div', class_='row').text.strip()
@@ -282,12 +338,6 @@ def mainGrainBoard(link):
             except:
                 itemDate = 'не указано, когда опубликовано'
 
-            #Город товара
-            try:
-                itemCity = itemsGrainBoard[i].find('div', class_='p-city').text.strip()
-            except:
-                itemCity = 'город не указан'
-
             #Организация, продающая товар
             try:
                 itemOrg = itemsGrainBoard[i].find('div', class_='media-body').find('a').text.strip()
@@ -298,7 +348,7 @@ def mainGrainBoard(link):
             additionArr(itemName, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
         time.sleep(1.5)
-        print(f'[INFO]: Обработал {indexPage}/{pages}')
+        print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{pages}')
 
         indexPage += 1
 
@@ -313,7 +363,7 @@ def main():
     time.sleep(1.5)
     excelEntry(arrName, arrCity, arrPrice, arrDate, arrOrg, arrLink)
     print(time.time() - start_time)
-    print(input("[INFO]: Программа успешно завершена -> для выхода нажмите любую кнопку... "))
+    print(Back.GREEN + Fore.WHITE + input("[INFO]: Программа успешно завершена -> для выхода нажмите любую кнопку... "))
 
 if __name__ == "__main__":
     main()
