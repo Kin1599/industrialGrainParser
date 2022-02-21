@@ -1,3 +1,6 @@
+from tkinter import E
+from unittest.loader import VALID_MODULE_NAME
+from xml.etree.ElementPath import iterfind
 import requests
 import fake_useragent
 import time
@@ -144,19 +147,25 @@ def distancebetweencities(myCity, alienCity):
 
 #Информация с Агро Сервера
 def mainAgroServer():
-    print(Back.GREEN + Fore.WHITE + f'[INFO]: Началась обработка с сайта {linkAgroServer}')
+    print(Fore.GREEN + f'[INFO]: Началась обработка с сайта {linkAgroServer}')
 
     indexPage = 1
+
+    countOldAds = 0
     
     soupAgroServer = getSoup(linkAgroServerSearch)
 
     #Получение кол-ва страниц
     try:
         pages = soupAgroServer.find('ul', class_ = 'pg').find_all('li')
-    except:
+    except AttributeError:
         pages = ["1"]
     
     while indexPage <= len(pages):
+        #Если количество устаревших объявления будет превышать число, то выходим из цикла
+        if countOldAds >= 15:
+            break
+
         currentLink = f'{linkAgroServerSearch}Y2l0eT18cmVnaW9uPXxjb3VudHJ5PXxtZXRrYT18c29ydD0x/{indexPage}/'
         # currentLink = linkAgroServerSearch
 
@@ -169,13 +178,19 @@ def mainAgroServer():
             #Когда опубликовали товар
             try:
                 itemDate = itemsAgroServer[i].find('div', class_ = 'date').text.strip()
-                if itemDate.find("сегодня") == -1 or itemDate.find("вчера") == -1:
-                    date = GoogleTranslator(source= "auto", target= "en").translate(text = itemDate)
-                    date = datetime.datetime.strptime(date, '%d %B %Y')
-                    if dateMax > date:
-                        print("Устаревшее объявление")
-                        continue
-            except:
+                if itemDate.find("сегодня") == 0 or itemDate.find("вчера") == 0:
+                    pass
+                else:
+                    try:
+                        date = GoogleTranslator(source= "auto", target= "en").translate(text = itemDate)
+                        date = datetime.datetime.strptime(date, '%d %B %Y')
+                        if dateMax > date:
+                            countOldAds += 1
+                            print("Устаревшее объявление")
+                            continue
+                    except ValueError:
+                        print(Back.RED + "[INFO]: Ошибка ValueError")
+            except AttributeError:
                 itemDate = "не указано, когда опубликовано"
 
             #Город товара
@@ -195,7 +210,7 @@ def mainAgroServer():
                     itemGeo = itemGeo.strip()
                 else:
                     itemGeo = itemGeo.strip()
-            except:
+            except AttributeError:
                 itemGeo = "город не указан"
 
             #Берём имя товара и ссылку на товар
@@ -203,43 +218,49 @@ def mainAgroServer():
                 itemName = itemsAgroServer[i].find('div', class_ = 'th')
                 itemLink = linkAgroServer + itemName.find('a').get('href')
                 itemName = itemName.text
-            except:
+            except AttributeError:
                 itemName = "Без имени"    
 
             #Берём цену товара
             try:
                 itemPrice = itemsAgroServer[i].find('div', class_ = 'price').text
-            except:
+            except AttributeError:
                 itemPrice = "цена не указана"
 
             #Организация, продающая товар
             try:
                 itemOrg = itemsAgroServer[i].find('a', class_ = 'personal_org_menu').text.strip()
-            except:
+            except AttributeError:
                 itemOrg = "компания не указана"
             
             print(f'{itemName} за {itemPrice} опубликован {itemDate} у {itemOrg}-> {itemLink}')
             additionArr(itemName, itemGeo, itemPrice, itemDate, itemOrg, itemLink)
 
         time.sleep(1)
-        print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{len(pages)}')
+        print(Fore.GREEN + f'[INFO]: Обработал {indexPage}/{len(pages)}')
 
         indexPage += 1
 
 def mainAgroRussia():
-    print(Back.GREEN + Fore.WHITE + f'[INFO]: Началась обработка с сайта {linkAgroRussia}')
+    print(Fore.GREEN + f'[INFO]: Началась обработка с сайта {linkAgroRussia}')
 
     indexPage = 1
+
+    countOldAds = 0
 
     soupAgroRussia = getSoup(linkAgroRussiaSearch + str(indexPage))
 
     #Получение кол-ва страниц
     try:
         pages = soupAgroRussia.find('span', class_ = 'list').find_all('a', class_ = 'page')
-    except:
+    except AttributeError:
         pages = []
 
     while indexPage <= len(pages) + 1:
+        #Если количество устаревших объявления будет превышать число, то выходим из цикла
+        if countOldAds >= 15:
+            break
+
         currentLink = linkAgroRussiaSearch + str(indexPage)
 
         soupAgroRussiaPage = getSoup(currentLink)
@@ -258,7 +279,7 @@ def mainAgroRussia():
                 #Берём цену на товар
                 try:
                     itemPrice = itemsAgroRussia[i].find('span', class_ = 'i_price').text
-                except:
+                except AttributeError:
                     itemPrice = "цена не указана"
 
                 soupAgroRussiaItem = getSoup(itemLink)
@@ -266,12 +287,18 @@ def mainAgroRussia():
                 #Когда опубликовали товар
                 try:
                     itemDate = soupAgroRussiaItem.find('time').text[:10]
-                    if itemDate.find("Сегодня") == -1 or itemDate.find("Вчера") == -1:
-                        date = datetime.datetime.strptime(itemDate, '%d-%m-%Y')
-                        if dateMax > date:
-                            print("Устаревшее объявление")
-                            continue
-                except:
+                    if itemDate.find("Сегодня") == 0 or itemDate.find("Вчера") == 0:
+                        pass
+                    else:
+                        try:
+                            date = datetime.datetime.strptime(itemDate, '%d-%m-%Y')
+                            if dateMax > date:
+                                countOldAds += 1
+                                print("Устаревшее объявление")
+                                continue
+                        except ValueError:
+                            print(Back.RED + "[INFO]: ValueError")
+                except AttributeError:
                     itemDate = "не указано, когда опубликовано"
 
                 #Город товара
@@ -283,27 +310,30 @@ def mainAgroRussia():
                     if beetween > purchaseRange:
                         print("Город не подходит")
                         continue
-                except:
+                except AttributeError:
                     itemCity = "город не указан"
                 
                 #Организация, продающая товар
                 try:
-                    itemOrg = soupAgroRussiaItem.find('div', class_ = 'ct_user_box_7_1').text[:itemOrg.find('/')]                 
-                except:
+                    itemOrg = soupAgroRussiaItem.find('div', class_ = 'ct_user_box_7_1')
+                    itemOrg = itemOrg.text[:itemOrg.find('/')]                 
+                except AttributeError:
                     itemOrg = "компания не указана"
 
                 print(f'{itemName.text} за {itemPrice} -> {itemLink}')
                 additionArr(itemName.text, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
         time.sleep(1)
-        print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
+        print(Fore.GREEN + f'[INFO]: Обработал {indexPage}/{len(pages) + 1}')
 
         indexPage += 1
 
 def mainGrainBoard(link):
-    print(Back.GREEN + Fore.WHITE + f'[INFO]: Началась обработка с сайта {linkGrainBoard}')
+    print(Fore.GREEN + f'[INFO]: Началась обработка с сайта {linkGrainBoard}')
 
     indexPage = 1
+
+    countOldAds = 0
 
     soupGrainBoard = getSoup(link + str(indexPage))
 
@@ -317,11 +347,20 @@ def mainGrainBoard(link):
                 link = soupGrainBoard.find('div', class_='pagerBox').find('a', attrs={'title':'Последняя страница'}).get('href')[:-1]
         else:
             pages = len(soupGrainBoard.find('p', class_='pages').find_all('a'))
-    except:
+    except AttributeError:
         pages = 1
 
     while indexPage <= int(pages):
-        currentLink = link + str(indexPage)
+
+        #Если количество устаревших объявления будет превышать число, то выходим из цикла
+        if countOldAds >= 15:
+            break
+
+        #Если у нас первая страница и в ссылке нет search
+        if indexPage == 1 and link.find('search') == -1:
+            currentLink = link[:link.find("?")] 
+        else:
+            currentLink = link + str(indexPage)
 
         print(currentLink)
         soupGrainBoardPage = getSoup(currentLink)
@@ -332,71 +371,80 @@ def mainGrainBoard(link):
         for i in range(0, len(itemsGrainBoard)):
             #Когда опубликовали товар
             try:
-                itemDate = itemsGrainBoard[i].find('td', class_='td-date').find('span').get('title').strip()
-                date_new = itemDate[:itemDate.find('г')]
-                date = GoogleTranslator(source= "auto", target= "en").translate(text = date_new)
-                date = datetime.datetime.strptime(date, '%B %d, %Y')
-                if dateMax > date:
-                    print("Устаревшее объявление")
-                    continue
-            except:
+                try:
+                    itemDate = itemsGrainBoard[i].find('td', class_='td-date').find('span').get('title').strip()
+                    if itemDate.find('Сегодня') == -1:
+                        date_new = itemDate[:itemDate.find('г', 10)]
+                        print(Fore.MAGENTA + date_new)
+                        date = GoogleTranslator(source= "auto", target= "en").translate(text = date_new)
+                        date = datetime.datetime.strptime(date, '%B %d, %Y')
+                        if dateMax > date:
+                            countOldAds += 1
+                            print("Устаревшее объявление")
+                            continue
+                    print(itemDate)
+                except ValueError:
+                    print(Back.RED + f'[INFO]: ValueError {date_new}')
+            except AttributeError:
                 itemDate = "не указано, когда опубликовано"
 
             #Город товара
             try:
-                itemCity = itemsGrainBoard[i].find('div', class_='p-city').text.strip()
-                beetween = float(distancebetweencities(fromCity, itemCity))
-                #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
-                if beetween > purchaseRange:
-                    print("Город не подходит")
-                    continue
-            except:
+                try:
+                    itemCity = itemsGrainBoard[i].find('div', class_='p-city').text.strip()
+                    beetween = float(distancebetweencities(fromCity, itemCity))
+                    #Если расстояние между городами больше максимальной дальности закупки, то просто продолжаем
+                    if beetween > purchaseRange:
+                        print("Город не подходит")
+                        continue
+                except TimeoutError:
+                    print(Back.RED + "[INFO]: Ошибка TimeoutError")
+            except AttributeError:
                 itemCity = "город не указан"
 
             #Берём имя товара
             try:
                 itemName = itemsGrainBoard[i].find('div', class_='row').text.strip()
-            except:
+            except AttributeError: 
                 itemName = "без названия"
             
             #Ссылка товара
             try:
                 itemLink = "https:" + itemsGrainBoard[i].find('div', class_='row').find('a').get('href')
-            except:
+            except AttributeError:
                 itemLink = "ссылка не найдена"
 
             #Берём цену на товар
             try:
                 itemPrice = itemsGrainBoard[i].find('td', class_='td-name').find('span', class_='price').text.strip()
-            except:
+            except AttributeError:
                 itemPrice = "цена не указана"
 
             #Организация, продающая товар
             try:
                 itemOrg = itemsGrainBoard[i].find('div', class_='media-body').find('a').text.strip()
-            except:
+            except AttributeError:
                 itemOrg = "компания не указана"
             
             print(f'{itemName} за {itemPrice} -> {itemLink}')
             additionArr(itemName, itemCity, itemPrice, itemDate, itemOrg, itemLink)
 
         time.sleep(1.5)
-        print(Back.GREEN + Fore.WHITE + f'[INFO]: Обработал {indexPage}/{pages}')
+        print(Fore.GREEN + f'[INFO]: Обработал {indexPage}/{pages}')
 
         indexPage += 1
 
-
 def main():
     start_time = time.time()
-    # mainAgroServer()
-    # time.sleep(1.5)
-    # mainAgroRussia()
-    # time.sleep(1.5)
+    mainAgroServer()
+    time.sleep(1.5)
+    mainAgroRussia()
+    time.sleep(1.5)
     mainGrainBoard(linkGrainBoardSearch)
     time.sleep(1.5)
     excelEntry(arrName, arrCity, arrPrice, arrDate, arrOrg, arrLink)
     print(time.time() - start_time)
-    print(Back.GREEN + Fore.WHITE + input("[INFO]: Программа успешно завершена -> для выхода нажмите любую кнопку... "))
+    print(Fore.GREEN + input("[INFO]: Программа успешно завершена -> для выхода нажмите любую кнопку... "))
 
 if __name__ == "__main__":
     main()
